@@ -2,6 +2,7 @@
 #include <SDL2/SDL.h>
 #include <bits/stdc++.h>
 
+
 // Set the screen res
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
@@ -86,6 +87,16 @@ void close()
 
 int main( int argc, char* args[] )
 {
+	Uint32 rmask, gmask, bmask, amask;
+
+	rmask = 0x000000ff;
+	gmask = 0x0000ff00;
+	bmask = 0x00ff0000;
+	amask = 0xff000000;
+	SDL_Surface* testing = SDL_CreateRGBSurface(0,SCREEN_WIDTH,SCREEN_HEIGHT,32,rmask,gmask,bmask,amask);
+	if (testing == NULL) {
+		std::cout << "why?";
+	}
 	//Start up SDL and create window
 	if( !init() )
 	{
@@ -101,7 +112,7 @@ int main( int argc, char* args[] )
 		else
 		{
 			//Apply the image
-			SDL_BlitSurface( gHelloWorld, NULL, gScreenSurface, NULL );
+			SDL_BlitSurface( testing, NULL, gScreenSurface, NULL );
 			
 			//Update the surface
 			SDL_UpdateWindowSurface( gWindow );

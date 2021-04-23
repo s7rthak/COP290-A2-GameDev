@@ -190,11 +190,11 @@ int main () {
         }
     }
 
-    vector <vector <char>> final_grid (30, vector <char> (30, 'w'));
+    vector <vector <char>> final_grid (32, vector <char> (32, 'w'));
     for (int i = 0; i < 9; i++) {
         for (int j = 0; j < 9; j++) {
             if (pos_paths[i][j] != -1) {
-                int x = 3*i+1, y = 3*j+1;
+                int x = 3*i+2, y = 3*j+2;
                 final_grid[x][y] = 'p';
                 final_grid[x+3][y] = 'p';
                 final_grid[x+3][y+3] = 'p';
@@ -219,10 +219,30 @@ int main () {
         }
     }
 
-    for (int i = 0; i < 30; i++) {
-        for (int j = 0; j < 30; j++) {
+    // Remove false-positives
+    for (int i = 0; i < 32; i++) {
+        for (int j = 0; j < 32; j++) {
+            if (final_grid[i][j] == 'p') {
+                if (final_grid[i-1][j] == 'w' && final_grid[i+1][j] == 'w' && final_grid[i][j-1] == 'w' && final_grid[i][j+1] == 'w') {
+                    final_grid[i][j] = 'w';
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < 32; i++) {
+        for (int j = 0; j < 32; j++) {
             cout << final_grid[i][j];
         }
         cout << "\n";
     }
+
+    fstream file("maze_layout.txt", fstream::out | fstream::trunc);
+    for (int i = 0; i < 32; i++) {
+        for (int j = 0; j < 32; j++) {
+            file << final_grid[i][j] << " ";
+        }
+        file << "\n";
+    }
+    file.close();
 }
