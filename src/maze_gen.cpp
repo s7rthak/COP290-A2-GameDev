@@ -1,4 +1,5 @@
 #include <bits/stdc++.h>
+#include "constants.hpp"
 
 using namespace std;
 
@@ -74,6 +75,7 @@ int main () {
         }
     }
 
+    // Assigning probabilistic weights for block-expansion based on block-size.
     vector <int> prob_based_on_size(6, 0);
     prob_based_on_size[0] = 5;
     prob_based_on_size[1] = 100;
@@ -190,30 +192,30 @@ int main () {
         }
     }
 
-    vector <vector <char>> final_grid (32, vector <char> (32, 'w'));
+    vector <vector <char>> final_grid (32, vector <char> (32, WALL));
     for (int i = 0; i < 9; i++) {
         for (int j = 0; j < 9; j++) {
             if (pos_paths[i][j] != -1) {
                 int x = 3*i+2, y = 3*j+2;
-                final_grid[x][y] = 'p';
-                final_grid[x+3][y] = 'p';
-                final_grid[x+3][y+3] = 'p';
-                final_grid[x][y+3] = 'p';
+                final_grid[x][y] = FOOD;
+                final_grid[x+3][y] = FOOD;
+                final_grid[x+3][y+3] = FOOD;
+                final_grid[x][y+3] = FOOD;
                 if (j - 1 < 0 || pos_paths[i][j-1] != pos_paths[i][j]) {
-                    final_grid[x+1][y] = 'p';
-                    final_grid[x+2][y] = 'p';
+                    final_grid[x+1][y] = FOOD;
+                    final_grid[x+2][y] = FOOD;
                 }
                 if (j + 1 > 8 || pos_paths[i][j+1] != pos_paths[i][j]) {
-                    final_grid[x+1][y+3] = 'p';
-                    final_grid[x+2][y+3] = 'p';
+                    final_grid[x+1][y+3] = FOOD;
+                    final_grid[x+2][y+3] = FOOD;
                 }
                 if (i - 1 < 0 || pos_paths[i-1][j] != pos_paths[i][j]) {
-                    final_grid[x][y+1] = 'p';
-                    final_grid[x][y+2] = 'p';
+                    final_grid[x][y+1] = FOOD;
+                    final_grid[x][y+2] = FOOD;
                 }
                 if (i + 1 > 8 || pos_paths[i+1][j] != pos_paths[i][j]) {
-                    final_grid[x+3][y+1] = 'p';
-                    final_grid[x+3][y+2] = 'p';
+                    final_grid[x+3][y+1] = FOOD;
+                    final_grid[x+3][y+2] = FOOD;
                 }
             }
         }
@@ -222,22 +224,48 @@ int main () {
     // Remove false-positives
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
-            if (final_grid[i][j] == 'p') {
-                if (final_grid[i-1][j] == 'w' && final_grid[i+1][j] == 'w' && final_grid[i][j-1] == 'w' && final_grid[i][j+1] == 'w') {
-                    final_grid[i][j] = 'w';
+            if (final_grid[i][j] == FOOD) {
+                if (final_grid[i-1][j] == WALL && final_grid[i+1][j] == WALL && final_grid[i][j-1] == WALL && final_grid[i][j+1] == WALL) {
+                    final_grid[i][j] = WALL;
                 }
             }
         }
     }
 
-    for (int i = 0; i < 32; i++) {
-        for (int j = 0; j < 32; j++) {
-            cout << final_grid[i][j];
-        }
-        cout << "\n";
+    // Random initialisation of pacman co-ordinates.
+    uniform_int_distribution <mt19937::result_type> dist32(0,31);
+    int pacmanX, pacmanY;
+    pacmanX = dist32(rng); pacmanY = dist32(rng);
+    while (final_grid[pacmanX][pacmanY] == WALL) {
+        pacmanX = dist32(rng); pacmanY = dist32(rng);
     }
 
-    fstream file("maze_layout.txt", fstream::out | fstream::trunc);
+    // Random monster(ghost) position initialisation such that MD >= 10.
+    int monster1X, monster1Y;
+    monster1X = dist32(rng); monster1Y = dist32(rng);
+    while (final_grid[monster1X][monster1Y] == WALL || abs(monster1X - pacmanX) + abs(monster1Y - pacmanY) < 10) {
+        monster1X = dist32(rng); monster1Y = dist32(rng);
+    }
+
+    int monster2X, monster2Y;
+    monster2X = dist32(rng); monster2Y = dist32(rng);
+    while (final_grid[monster2X][monster2Y] == WALL || abs(monster2X - pacmanX) + abs(monster2Y - pacmanY) < 10) {
+        monster2X = dist32(rng); monster2Y = dist32(rng);
+    }
+
+    // Change map positions likewise.
+    final_grid[pacmanX][pacmanY] = PACMAN;
+    final_grid[monster1X][monster1Y] = MONSTER1_ON_FOOD;
+    final_grid[monster2X][monster2Y] = MONSTER2_ON_FOOD;
+
+    // for (int i = 0; i < 32; i++) {
+    //     for (int j = 0; j < 32; j++) {
+    //         cout << final_grid[i][j];
+    //     }
+    //     cout << "\n";
+    // }
+
+    fstream file("../assets/maze_layout.txt", fstream::out | fstream::trunc);
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
             file << final_grid[i][j] << " ";
