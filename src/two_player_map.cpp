@@ -1,19 +1,95 @@
-#include "map.hpp"
-#include "game.hpp"
+#include "two_player_map.hpp"
 #include "texture_manager.hpp"
 #include "constants.hpp"
 #include "util.hpp"
+#include "map_layout_read.hpp"
+#include <boost/array.hpp>
 #include <SDL2/SDL_ttf.h>
 
-Map::Map (char** lvl, std::vector<int> &posi) 
+using namespace boost::asio;
+using ip::udp;
+
+std::vector <std::string> split (std::string &text) {
+    std::istringstream iss(text);
+    std::string s;
+    std::vector <std::string> res;
+
+    while (getline(iss, s, ' ')) {
+        res.push_back(s);
+    }
+
+    return res;
+}
+
+TwoPlayerMap::TwoPlayerMap () 
 {
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    io_service io_service;
+    
+    //socket creation
+    udp::socket socket(io_service);
+    
+    //connection
+    socket.open(udp::v4());
+
+    const int timeout = 200;
+    ::setsockopt(socket.native_handle(), SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof timeout);//SO_SNDTIMEO for send ops
+    
+    // request/message from client
+    const std::string msg = "Hello from Client!\n";
+    udp::endpoint server = udp::endpoint{ip::address::from_string("127.0.0.1"), 1234};
+    socket.send_to(buffer("Hi!"), server);
+    std::cout << "Client sent hello message!" << std::endl;
+    
+    // getting response from server
+    boost::array<char, 128> recv_buf;
+    size_t len = socket.receive_from(buffer(recv_buf), server);
+    
+    std::string message = recv_buf.data();
+    std::cout << message << "\n";
+
+    std::vector <std::string> peer_info = split(message);
+    udp::endpoint peer = udp::endpoint{ip::address::from_string(peer_info[0]), stoi(peer_info[1])};
+
+    socket.send_to(buffer("Hello peer"), peer);
+    socket.receive_from(buffer(recv_buf), peer);
+
+    std::cout << recv_buf.data() << "\n";
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    my_socket = &socket;
+    opponent_endpoint = &peer;
+    opponent_lives_left = MAX_LIVES;
+    opponent_last_frame = -1;
+    opponent_score = 0;
+
     std::random_device dev;
     std::mt19937 rng(dev());
-    std::uniform_int_distribution<std::mt19937::result_type> dist6(1,6); // distribution in range [1, 6]
+    std::uniform_int_distribution<std::mt19937::result_type> dist7(1,7);
+    int my_value = dist7(rng), opponent_value;
 
-    int choose = dist6(rng);
+    my_socket->send_to(buffer(std::to_string(my_value)), *opponent_endpoint);
+    my_socket->receive_from(buffer(recv_buf), *opponent_endpoint);
+    opponent_value = std::stoi(recv_buf.data());
+    while (my_value == opponent_value) {
+        my_socket->send_to(buffer(std::to_string(my_value)), *opponent_endpoint);
+        my_socket->receive_from(buffer(recv_buf), *opponent_endpoint);
+        opponent_value = std::stoi(recv_buf.data());
+    }
 
-    std::string WallChosen = "../assets/wall-" + std::to_string(choose) + ".png";
+    isHost = my_value > opponent_value;
+    int map_chosen;
+    std::vector <int> posi;
+    if (isHost) {
+        map_chosen = dist7(rng);
+        my_socket->send_to(buffer(std::to_string(map_chosen)), *opponent_endpoint);
+    } else {
+        my_socket->receive_from(buffer(recv_buf), *opponent_endpoint);
+        map_chosen = std::stoi(recv_buf.data());
+    }
+    posi = ReadLayout(map, "../assets/Multiplayer/map_" + std::to_string(map_chosen) + ".txt");
+
+    std::string WallChosen = "../assets/wall-" + std::to_string(TWO_PLAYER_LAYOUT_COLOR) + ".png";
 
     wall = TextureManager::LoadTexture(WallChosen.c_str());
     food = TextureManager::LoadTexture("../assets/food.png");
@@ -23,29 +99,22 @@ Map::Map (char** lvl, std::vector<int> &posi)
     monster1 = TextureManager::LoadTexture("../assets/monster1.png");
     monster2 = TextureManager::LoadTexture("../assets/monster2.png");
 
-    LoadMap(lvl);
-
     src.x = src.y = 0;
     src.w = dest.w = TILE_WIDTH;
     src.h = dest.h = TILE_HEIGHT;
 
-    Pacman = new GameObject(posi[1], posi[0], lvl);
-    Monster1 = new GameObject(posi[3], posi[2], lvl);
-    Monster2 = new GameObject(posi[5], posi[4], lvl);
+    Pacman = new GameObject(posi[1], posi[0], map);
+    Monster1 = new GameObject(posi[3], posi[2], map);
+    Monster2 = new GameObject(posi[5], posi[4], map);
 }
 
-void Map::LoadMap (char** lvl) 
-{
-    map = lvl;
-}
-
-void Map::UpdateMap (SDL_Event &e) 
+void TwoPlayerMap::UpdateMap (SDL_Event &e) 
 {
     Pacman->handleEvent (e);
     Pacman->Update ();
 }
 
-void Map::MoveMonsters ()
+void TwoPlayerMap::MoveMonsters ()
 {
     int xmap_new, ymap_new;
     std::pair <int, std::string> res;
@@ -127,7 +196,7 @@ void Map::MoveMonsters ()
     Monster2->ymap = ymap_new;
 }
 
-void Map::DrawMap () 
+void TwoPlayerMap::DrawMap () 
 {
     for (int i = 0; i < 31; i++) {
         for (int j = 0; j < 31; j++) {
@@ -197,40 +266,4 @@ void Map::DrawMap ()
     }
 
     FrameCnt++;
-}
-
-void Map::RenderMap () 
-{
-    SDL_Rect s, d;
-    SDL_RenderClear(Game::renderer);
-
-    DrawMap();
-
-    TTF_Font* font = TTF_OpenFont("../assets/EvilEmpire-4BBVK.ttf", 50);
-
-    // Set-up score-board texture.
-    std::string text = "Score: " + std::to_string(score);
-    SDL_Surface* textSurface = TTF_RenderText_Solid(font, text.c_str(), { 0, 255, 255 });
-    SDL_Texture* score_board = SDL_CreateTextureFromSurface(Game::renderer, textSurface);
-    SDL_FreeSurface(textSurface);
-
-    int w, h;
-    SDL_QueryTexture(score_board, NULL, NULL, &w, &h);
-
-    s.x = s.y = 0; d.x = 20; d.y = 780; s.w = d.w = w; s.h = d.h = h;
-    TextureManager::Draw(score_board, s, d, 0.0f, false, 0);
-
-    TTF_CloseFont(font);
-
-    // Set-up Lives texture.
-    SDL_Texture* life = TextureManager::LoadTexture("../assets/life.png");
-    SDL_QueryTexture(life, NULL, NULL, &w, &h);
-
-    s.x = s.y = 0; s.w = d.w = w; s.h = d.h = h; d.y = 780;
-    for (int i = 0; i < lives_left; i++) {
-        d.x = SCREEN_WIDTH - (i + 1) * (w - 3);
-        TextureManager::Draw(life, s, d, 0.0f, false, 0); 
-    }
-
-    SDL_RenderPresent(Game::renderer);
 }

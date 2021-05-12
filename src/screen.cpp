@@ -1,7 +1,9 @@
 #include "screen.hpp"
-
+#include <bits/stdc++.h>
+#include "screen_component.hpp"
 #include "texture_manager.hpp"
 #include "constants.hpp"
+#include "game.hpp"
 
 Screen::Screen ()
 {
@@ -66,7 +68,7 @@ void Screen::Render ()
 {
     SDL_RenderClear(Game::renderer);
     for (int i = 0; i < imgs.size(); i++) {
-        TextureManager::Draw(imgs[i].tex, imgs[i].src, imgs[i].dest, 0.0f, false);
+        TextureManager::Draw(imgs[i].tex, imgs[i].src, imgs[i].dest, 0.0f, false, 0);
     }
     for (int i = 0; i < components.size(); i++) {
         components[i].Render();

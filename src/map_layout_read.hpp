@@ -4,10 +4,10 @@
 #include <bits/stdc++.h>
 #include "constants.hpp"
 
-std::vector<int> ReadLayout (char** lvl_rand) {
+std::vector<int> ReadLayout (char** lvl_rand, std::string layout) {
     std::vector <int> positions (6);
 
-    std::ifstream ReadFile ("../assets/maze_layout.txt");
+    std::ifstream ReadFile (layout);
     std::string ch;
 
     for (int i = 0; i < 32; i++) {

@@ -33,7 +33,7 @@ const int MOVE_VEL_X = 5;
 const int MOVE_VEL_Y = 4;
 
 // Jump frames for monsters
-const int FRAME_JUMP = 3;
+const int FRAME_JUMP = 1;
 
 // Monster AI difficulty
 const int DIFFICULTY = 0;
@@ -56,5 +56,6 @@ const int GOOD_END_SP = 4;
 const int BAD_END_SP = 5;
 
 const int MAX_LIVES = 3;
+const int TWO_PLAYER_LAYOUT_COLOR = 1;
 
 #endif

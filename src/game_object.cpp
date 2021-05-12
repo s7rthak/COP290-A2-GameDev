@@ -1,4 +1,6 @@
 #include "game_object.hpp"
+#include "game.hpp"
+#include "constants.hpp"
 #include "texture_manager.hpp"
 
 GameObject::GameObject(int x, int y, char** lvl) {

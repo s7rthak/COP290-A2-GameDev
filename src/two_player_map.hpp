@@ -1,19 +1,20 @@
-#ifndef MAP_HPP
-#define MAP_HPP
+#ifndef TWO_PLAYER_HPP
+#define TWO_PLAYER_HPP
 
 #include "game_object.hpp"
-#include <bits/stdc++.h>
+#include <boost/asio.hpp>
 
-class Map {
+using namespace boost::asio;
+using ip::udp;
+
+class TwoPlayerMap {
     public:
-        Map (char** lvl, std::vector<int> &posi);
-        ~Map ();
+        TwoPlayerMap ();
+        ~TwoPlayerMap ();
 
-        void LoadMap (char** lvl);
         void UpdateMap (SDL_Event &e);
         void MoveMonsters ();
         void DrawMap ();
-        void RenderMap ();
         char** map;
         int FrameCnt = 0;
         GameObject* Pacman;
@@ -27,6 +28,15 @@ class Map {
 
         int score = 0;
         int lives_left;
+        bool isHost;
+        bool gameWon = false;
+
+        udp::socket* my_socket;
+        // Other player info
+        udp::endpoint* opponent_endpoint;
+        int opponent_score;
+        int opponent_lives_left;
+        int opponent_last_frame;
 
     private:
         SDL_Rect src, dest;

@@ -1,7 +1,7 @@
 #ifndef GAME_OBJECT_HPP
 #define GAME_OBJECT_HPP
-#include "game.hpp"
-#include "constants.hpp"
+
+#include <SDL2/SDL.h>
 
 class GameObject {
     public:

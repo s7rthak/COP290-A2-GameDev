@@ -2,9 +2,6 @@
 #define GAME_HPP
 
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
-#include <bits/stdc++.h>
-
 
 
 class Game {
@@ -27,6 +24,7 @@ class Game {
         bool running () { return isRunning; }
         
         static SDL_Renderer* renderer;
+        static SDL_Renderer* nRenderer;
 
         int lives_left;
 

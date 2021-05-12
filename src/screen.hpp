@@ -1,6 +1,8 @@
+#ifndef SCREEN_HPP
+#define SCREEN_HPP
+
 #include <SDL2/SDL_ttf.h>
 #include <bits/stdc++.h>
-#include "game.hpp"
 #include "screen_component.hpp"
 
 class Screen {
@@ -20,3 +22,5 @@ class Screen {
     private:
         
 };
+
+#endif

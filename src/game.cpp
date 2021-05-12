@@ -1,10 +1,14 @@
 #include "game.hpp"
+#include <SDL2/SDL_image.h>
+#include <bits/stdc++.h>
 #include "texture_manager.hpp"
 #include "game_object.hpp"
 #include "map.hpp"
 #include "map_layout_read.hpp"
 #include "screen.hpp"
+// #include "two_player_map.hpp"
 #include <SDL2/SDL_ttf.h>
+
 
 int MD (int x1, int y1, int x2, int y2) {
     return abs(x1 - x2) + abs(y1 - y2);
@@ -15,7 +19,9 @@ int MD (int x1, int y1, int x2, int y2) {
 // GameObject* monster2;
 
 SDL_Renderer* Game::renderer = nullptr;
+SDL_Renderer* Game::nRenderer = nullptr;
 Map* map;
+// TwoPlayerMap* two_player;
 Screen* firstScreen;
 Screen* goodEnd;
 Screen* badEnd; 
@@ -56,7 +62,6 @@ void Game::init (const char* title, int xpos, int ypos, int width, int height, b
     } else {
         isRunning = false;
     }
-    lives_left = MAX_LIVES;
 }
 
 void Game::LoadGameStates () 
@@ -117,13 +122,48 @@ void Game::LoadGameStates ()
             for (int i = 0; i < 32; i++)
                 rand_lvl[i] = (char*)malloc(32 * sizeof(char));
 
-            std::vector <int> pos = ReadLayout(rand_lvl);
+            std::vector <int> pos = ReadLayout(rand_lvl, "../assets/maze_layout.txt");
             map = new Map(rand_lvl, pos);
+            map->lives_left = MAX_LIVES;
 
-            render();
+            map->RenderMap();
             SDL_Delay(3000);
 
             while (gameState == SINGLE_PLAYER) {
+                frameStart = SDL_GetTicks();
+                SDL_PollEvent(&event);
+
+                switch (event.type)
+                {
+                case SDL_QUIT:
+                    gameState = EXITED;
+                    isRunning = false;
+                    break;
+
+                default:
+                    map->UpdateMap(event);
+                    CheckGoodEndGame();
+                    update();
+                    UpdateScore ();
+                    CheckBadEndGame();
+                    map->RenderMap();
+
+                    break;
+                }
+
+                frameTime = SDL_GetTicks() - frameStart;
+                if (frameDelay > frameTime) {
+                    SDL_Delay(frameDelay - frameTime);
+                }
+            }
+        }
+
+        else if (gameState == TWO_PLAYER) {
+            // two_player = new TwoPlayerMap();
+            // two_player
+            SDL_Delay(3000);
+
+            while (gameState == TWO_PLAYER) {
                 frameStart = SDL_GetTicks();
                 SDL_PollEvent(&event);
 
@@ -192,7 +232,7 @@ void Game::LoadGameStates ()
                             he_res = goodEnd->HandleEvents (event);
                             if (he_res == 3) {
                                 gameState = START_MENU;
-                                lives_left = MAX_LIVES;
+                                map->lives_left = MAX_LIVES;
                             }
                             else if (he_res == 4) {
                                 gameState = EXITED;
@@ -244,7 +284,7 @@ void Game::LoadGameStates ()
                             he_res = badEnd->HandleEvents (event);
                             if (he_res == 3) {
                                 gameState = START_MENU;
-                                lives_left = MAX_LIVES;
+                                map->lives_left = MAX_LIVES;
                             }
                             else if (he_res == 4) {
                                 gameState = EXITED;
@@ -303,11 +343,11 @@ void Game::CheckGoodEndGame ()
 void Game::CheckBadEndGame () 
 {
     if ((map->Pacman->xmap == map->Monster1->xmap && map->Pacman->ymap == map->Monster1->ymap) || (map->Pacman->xmap == map->Monster2->xmap && map->Pacman->ymap == map->Monster2->ymap)) {
-        if (lives_left == 0) {
+        if (map->lives_left == 0) {
             gameState = BAD_END_SP;
             isRunning = false;
         } else {
-            lives_left--;
+            map->lives_left--;
             SDL_Delay(2000);
 
             std::random_device dev;
@@ -359,7 +399,7 @@ void Game::render ()
     SDL_QueryTexture(score_board, NULL, NULL, &w, &h);
 
     s.x = s.y = 0; d.x = 20; d.y = 780; s.w = d.w = w; s.h = d.h = h;
-    TextureManager::Draw(score_board, s, d, 0.0f, false);
+    TextureManager::Draw(score_board, s, d, 0.0f, false, 0);
 
     TTF_CloseFont(font);
 
@@ -368,9 +408,9 @@ void Game::render ()
     SDL_QueryTexture(life, NULL, NULL, &w, &h);
 
     s.x = s.y = 0; s.w = d.w = w; s.h = d.h = h; d.y = 780;
-    for (int i = 0; i < lives_left; i++) {
+    for (int i = 0; i < map->lives_left; i++) {
         d.x = SCREEN_WIDTH - (i + 1) * (w - 3);
-        TextureManager::Draw(life, s, d, 0.0f, false); 
+        TextureManager::Draw(life, s, d, 0.0f, false, 0); 
     }
 
     SDL_RenderPresent(renderer);

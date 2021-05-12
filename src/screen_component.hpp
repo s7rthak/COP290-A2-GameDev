@@ -1,4 +1,7 @@
-#include "game.hpp"
+#ifndef SCREEN_COMPONENT_HPP
+#define SCREEN_COMPONENT_HPP
+
+#include <SDL2/SDL.h>
 
 class ScreenComponent{
     public:
@@ -24,3 +27,5 @@ struct ScreenImage{
     SDL_Rect src;
     SDL_Rect dest;
 };
+
+#endif

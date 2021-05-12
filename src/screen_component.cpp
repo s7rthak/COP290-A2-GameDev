@@ -47,9 +47,9 @@ int ScreenComponent::HandleEvents (SDL_Event& e)
 void ScreenComponent::Render ()
 {
     if (show_alt) {
-        TextureManager::Draw(stex, src, dest, 0.0f, false);
+        TextureManager::Draw(stex, src, dest, 0.0f, false, 0);
     } else {
-        TextureManager::Draw(tex, src, dest, 0.0f, false);
+        TextureManager::Draw(tex, src, dest, 0.0f, false, 0);
     }
     // SDL_RenderPresent(Game::renderer);
 }
