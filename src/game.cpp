@@ -6,7 +6,8 @@
 #include "map.hpp"
 #include "map_layout_read.hpp"
 #include "screen.hpp"
-// #include "two_player_map.hpp"
+#include "two_player_map.hpp"
+#include "constants.hpp"
 #include <SDL2/SDL_ttf.h>
 
 
@@ -21,7 +22,7 @@ int MD (int x1, int y1, int x2, int y2) {
 SDL_Renderer* Game::renderer = nullptr;
 SDL_Renderer* Game::nRenderer = nullptr;
 Map* map;
-// TwoPlayerMap* two_player;
+TwoPlayerMap* two_player;
 Screen* firstScreen;
 Screen* goodEnd;
 Screen* badEnd; 
@@ -105,6 +106,12 @@ void Game::LoadGameStates ()
                             he_res = firstScreen->HandleEvents (event);
                             if (he_res == SCREEN_CHANGE_SP) {
                                 gameState = SINGLE_PLAYER;
+                            } 
+                            else if (he_res == SCREEN_CHANGE_2P) {
+                                gameState = TWO_PLAYER;
+                            }
+                            else if (he_res == SCREEN_CHANGE_BB) {
+                                gameState = BLACK_BOX;
                             }
                             break;
                     }
@@ -159,9 +166,16 @@ void Game::LoadGameStates ()
         }
 
         else if (gameState == TWO_PLAYER) {
-            // two_player = new TwoPlayerMap();
-            // two_player
+            // dynamically create array of pointers of size num_rows
+            char** lvl = (char**)malloc(32 * sizeof(char*));
+        
+            // dynamically allocate memory of size num_rows for each row
+            for (int i = 0; i < 32; i++)
+                lvl[i] = (char*)malloc(32 * sizeof(char));
+
+            two_player = new TwoPlayerMap(lvl);
             SDL_Delay(3000);
+            two_player->RenderMap();
 
             while (gameState == TWO_PLAYER) {
                 frameStart = SDL_GetTicks();
@@ -175,13 +189,8 @@ void Game::LoadGameStates ()
                     break;
 
                 default:
-                    map->UpdateMap(event);
-                    CheckGoodEndGame();
-                    update();
-                    UpdateScore ();
-                    CheckBadEndGame();
-                    render();
-
+                    two_player->RenderMap ();
+                    two_player->ExchangeMapInfo ();
                     break;
                 }
 
@@ -363,7 +372,7 @@ void Game::CheckBadEndGame ()
             map->map[pacmanY][pacmanX] = PACMAN;
             map->Pacman->xmap = pacmanX; map->Pacman->ymap = pacmanY;
             map->Pacman->xpos = map->Pacman->xmap * TILE_WIDTH; map->Pacman->ypos = map->Pacman->ymap * TILE_HEIGHT;
-            render();
+            map->RenderMap ();
             SDL_Delay(2000);
         }
     }
@@ -379,41 +388,6 @@ void Game::UpdateScore () {
         }
     }
     map->score -= (map->FrameCnt / 6);
-}
-
-void Game::render ()
-{
-    SDL_RenderClear(renderer);
-
-    map->DrawMap();
-
-    TTF_Font* font = TTF_OpenFont("../assets/EvilEmpire-4BBVK.ttf", 50);
-
-    // Set-up score-board texture.
-    std::string text = "Score: " + std::to_string(map->score);
-    SDL_Surface* textSurface = TTF_RenderText_Solid(font, text.c_str(), { 0, 255, 255 });
-    SDL_Texture* score_board = SDL_CreateTextureFromSurface(Game::renderer, textSurface);
-    SDL_FreeSurface(textSurface);
-
-    int w, h;
-    SDL_QueryTexture(score_board, NULL, NULL, &w, &h);
-
-    s.x = s.y = 0; d.x = 20; d.y = 780; s.w = d.w = w; s.h = d.h = h;
-    TextureManager::Draw(score_board, s, d, 0.0f, false, 0);
-
-    TTF_CloseFont(font);
-
-    // Set-up Lives texture.
-    SDL_Texture* life = TextureManager::LoadTexture("../assets/life.png");
-    SDL_QueryTexture(life, NULL, NULL, &w, &h);
-
-    s.x = s.y = 0; s.w = d.w = w; s.h = d.h = h; d.y = 780;
-    for (int i = 0; i < map->lives_left; i++) {
-        d.x = SCREEN_WIDTH - (i + 1) * (w - 3);
-        TextureManager::Draw(life, s, d, 0.0f, false, 0); 
-    }
-
-    SDL_RenderPresent(renderer);
 }
 
 void Game::clean ()

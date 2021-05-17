@@ -14,7 +14,6 @@ class Game {
         void LoadGameStates ();
         void handleEvents ();
         void update ();
-        void render ();
         void clean ();
 
         void CheckGoodEndGame ();

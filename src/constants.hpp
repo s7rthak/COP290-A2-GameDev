@@ -56,6 +56,7 @@ const int GOOD_END_SP = 4;
 const int BAD_END_SP = 5;
 
 const int MAX_LIVES = 3;
-const int TWO_PLAYER_LAYOUT_COLOR = 1;
+const int TWO_PLAYER_LAYOUT_COLOR = 3;
+const int WEAK_CONNECTION = 5;
 
 #endif

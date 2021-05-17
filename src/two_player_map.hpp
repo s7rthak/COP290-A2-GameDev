@@ -9,12 +9,15 @@ using ip::udp;
 
 class TwoPlayerMap {
     public:
-        TwoPlayerMap ();
+        TwoPlayerMap (char** lvl);
         ~TwoPlayerMap ();
 
         void UpdateMap (SDL_Event &e);
         void MoveMonsters ();
         void DrawMap ();
+        void RenderMap ();
+        void ExchangeMapInfo ();
+
         char** map;
         int FrameCnt = 0;
         GameObject* Pacman;
@@ -32,11 +35,13 @@ class TwoPlayerMap {
         bool gameWon = false;
 
         udp::socket* my_socket;
+        udp::endpoint* my_endpoint;
         // Other player info
         udp::endpoint* opponent_endpoint;
         int opponent_score;
         int opponent_lives_left;
         int opponent_last_frame;
+        int opponent_cur_frame;
 
     private:
         SDL_Rect src, dest;

@@ -2,6 +2,7 @@
 #include "texture_manager.hpp"
 #include "constants.hpp"
 #include "util.hpp"
+#include "game.hpp"
 #include "map_layout_read.hpp"
 #include <boost/array.hpp>
 #include <SDL2/SDL_ttf.h>
@@ -21,8 +22,27 @@ std::vector <std::string> split (std::string &text) {
     return res;
 }
 
-TwoPlayerMap::TwoPlayerMap () 
+std::string recv_string (udp::socket &socket, boost::array<char, 128> &buff,udp::endpoint &sender) {
+    std::string recv_mess;
+    buff.assign(0);
+    socket.receive_from(buffer(buff), sender);
+    recv_mess = buff.data();
+    while (recv_mess == "Keep Alive") {
+        buff.assign(0);
+        socket.receive_from(buffer(buff), sender);
+        recv_mess = buff.data();
+    }
+    return recv_mess;
+}
+
+TwoPlayerMap::TwoPlayerMap (char** lvl) 
 {
+    std::random_device dev;
+    std::mt19937 rng(dev());
+
+    std::uniform_int_distribution<std::mt19937::result_type> dist(1235,50000);
+    int my_port = dist(rng);
+
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
     io_service io_service;
     
@@ -31,9 +51,12 @@ TwoPlayerMap::TwoPlayerMap ()
     
     //connection
     socket.open(udp::v4());
+    udp::endpoint endpoint_ = udp::endpoint{ip::address::from_string("127.0.0.1"), my_port};
+    my_endpoint = &endpoint_;
+    socket.bind(*my_endpoint);
 
     const int timeout = 200;
-    ::setsockopt(socket.native_handle(), SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof timeout);//SO_SNDTIMEO for send ops
+    // ::setsockopt(socket.native_handle(), SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof timeout);//SO_SNDTIMEO for send ops
     
     // request/message from client
     const std::string msg = "Hello from Client!\n";
@@ -53,28 +76,32 @@ TwoPlayerMap::TwoPlayerMap ()
 
     socket.send_to(buffer("Hello peer"), peer);
     socket.receive_from(buffer(recv_buf), peer);
+    socket.receive_from(buffer(recv_buf), server);
 
-    std::cout << recv_buf.data() << "\n";
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     my_socket = &socket;
     opponent_endpoint = &peer;
     opponent_lives_left = MAX_LIVES;
     opponent_last_frame = -1;
+    opponent_cur_frame = -1;
     opponent_score = 0;
 
-    std::random_device dev;
-    std::mt19937 rng(dev());
     std::uniform_int_distribution<std::mt19937::result_type> dist7(1,7);
     int my_value = dist7(rng), opponent_value;
+    std::string opp_mess;
+
+    assert(peer == *opponent_endpoint);
 
     my_socket->send_to(buffer(std::to_string(my_value)), *opponent_endpoint);
-    my_socket->receive_from(buffer(recv_buf), *opponent_endpoint);
-    opponent_value = std::stoi(recv_buf.data());
+    opp_mess = recv_string(*my_socket, recv_buf, *opponent_endpoint);
+    opponent_value = std::stoi(opp_mess);
+    std::cout << my_value << " " << opponent_value << "\n";
     while (my_value == opponent_value) {
+        my_value = dist7(rng);
         my_socket->send_to(buffer(std::to_string(my_value)), *opponent_endpoint);
-        my_socket->receive_from(buffer(recv_buf), *opponent_endpoint);
-        opponent_value = std::stoi(recv_buf.data());
+        opp_mess = recv_string(*my_socket, recv_buf, *opponent_endpoint);
+        opponent_value = std::stoi(opp_mess);
     }
 
     isHost = my_value > opponent_value;
@@ -84,10 +111,16 @@ TwoPlayerMap::TwoPlayerMap ()
         map_chosen = dist7(rng);
         my_socket->send_to(buffer(std::to_string(map_chosen)), *opponent_endpoint);
     } else {
-        my_socket->receive_from(buffer(recv_buf), *opponent_endpoint);
-        map_chosen = std::stoi(recv_buf.data());
+        opp_mess = recv_string(*my_socket, recv_buf, *opponent_endpoint);
+        map_chosen = std::stoi(opp_mess);
     }
+
+    // Initialize Game Resources.
+    std::cout << "Map Chosen: " << map_chosen << "\n";
+    map = lvl;
     posi = ReadLayout(map, "../assets/Multiplayer/map_" + std::to_string(map_chosen) + ".txt");
+    lives_left = MAX_LIVES;
+    // assert(posi.size() == 6);
 
     std::string WallChosen = "../assets/wall-" + std::to_string(TWO_PLAYER_LAYOUT_COLOR) + ".png";
 
@@ -106,6 +139,7 @@ TwoPlayerMap::TwoPlayerMap ()
     Pacman = new GameObject(posi[1], posi[0], map);
     Monster1 = new GameObject(posi[3], posi[2], map);
     Monster2 = new GameObject(posi[5], posi[4], map);
+
 }
 
 void TwoPlayerMap::UpdateMap (SDL_Event &e) 
@@ -266,4 +300,75 @@ void TwoPlayerMap::DrawMap ()
     }
 
     FrameCnt++;
+}
+
+void TwoPlayerMap::RenderMap ()
+{
+    SDL_Rect s, d;
+    SDL_RenderClear(Game::renderer);
+
+    DrawMap();
+
+    TTF_Font* font = TTF_OpenFont("../assets/EvilEmpire-4BBVK.ttf", 50);
+
+    // Set-up score-board texture.
+    std::string text = "Score: ";
+    if (isHost) text += std::to_string(score);
+    else text += std::to_string(opponent_score);
+    SDL_Surface* textSurface = TTF_RenderText_Solid(font, text.c_str(), { 0, 255, 255 });
+    SDL_Texture* score_board = SDL_CreateTextureFromSurface(Game::renderer, textSurface);
+    SDL_FreeSurface(textSurface);
+
+    int w, h;
+    SDL_QueryTexture(score_board, NULL, NULL, &w, &h);
+
+    s.x = s.y = 0; d.x = 20; d.y = 780; s.w = d.w = w; s.h = d.h = h;
+    TextureManager::Draw(score_board, s, d, 0.0f, false, 0);
+
+    // Warn player in case of weak connection.
+    if (opponent_cur_frame - opponent_last_frame > WEAK_CONNECTION) {
+        std::string wc = "Weak Connection";
+        textSurface = TTF_RenderText_Shaded(font, wc.c_str(), { 255, 0, 0 }, { 0, 255, 0 });
+        SDL_Texture* weak_con = SDL_CreateTextureFromSurface(Game::renderer, textSurface);
+        SDL_FreeSurface(textSurface);
+
+        SDL_QueryTexture(weak_con, NULL, NULL, &w, &h);
+        s.x = s.y = 0; d.x = (SCREEN_WIDTH - w) / 2; d.y = 360; s.w = d.w = w; s.h = d.h = h;
+        TextureManager::Draw(weak_con, s, d, 0.0f, false, 0);
+    }
+
+    TTF_CloseFont(font);
+
+    // Set-up Lives texture.
+    SDL_Texture* life = TextureManager::LoadTexture("../assets/life.png");
+    SDL_QueryTexture(life, NULL, NULL, &w, &h);
+
+    s.x = s.y = 0; s.w = d.w = w; s.h = d.h = h; d.y = 780;
+    for (int i = 0; (isHost && i < lives_left) || (!isHost && i < opponent_lives_left); i++) {
+        d.x = SCREEN_WIDTH - (i + 1) * (w - 3);
+        TextureManager::Draw(life, s, d, 0.0f, false, 0); 
+    }
+
+    SDL_RenderPresent(Game::renderer);
+}
+
+void TwoPlayerMap::ExchangeMapInfo ()
+{
+    // Socket refresh and exchange info.
+    io_service io_service;
+    udp::socket socket(io_service);
+    socket.open(udp::v4());
+    socket.bind(*my_endpoint);
+    boost::array<char, 128> recv_buf;
+
+    if (isHost) {
+        socket.send_to(buffer(std::to_string(FrameCnt) + " " + std::to_string(score) + " " + std::to_string(lives_left)), *opponent_endpoint);
+    } else {
+        std::string opp_info = recv_string(socket, recv_buf, *opponent_endpoint);
+        std::vector <std::string> all_info = split(opp_info);
+        opponent_last_frame = opponent_cur_frame;
+        opponent_cur_frame = std::stoi(all_info[0]);
+        opponent_score = std::stoi(all_info[1]);
+        opponent_lives_left = std::stoi(all_info[2]);
+    }
 }
