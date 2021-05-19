@@ -1,6 +1,6 @@
 # COP290-A2-GameDev
 
-A Pacman-like maze game using SDL2. Ghosts are heuristic-driven with varying degree of randomness based on difficulty parameter. To build and run the game:-  \
+A Pacman-like maze game using SDL2. Ghosts are heuristic-driven with varying degree of randomness based on difficulty parameter. To build and run the game:-
 
 ```
 make compile_game
