@@ -6,6 +6,7 @@ A Pacman-like maze game using SDL2. Ghosts are heuristic-driven with varying deg
 make compile_game
 make run_game
 ```
+
 Following is a screenshot from the game.\
 ![Pacman Game](/assets/cover.jpg "Game still")
 
