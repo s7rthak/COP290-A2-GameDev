@@ -12,11 +12,6 @@ int main () {
 
     while (game->running()) {
         game->LoadGameStates();
-        // game->handleEvents();
-        // game->CheckGoodEndGame();
-        // game->update ();
-        // game->CheckBadEndGame();
-        // game->render ();
     }
 
     game->clean ();

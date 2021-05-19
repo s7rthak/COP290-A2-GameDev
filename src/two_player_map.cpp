@@ -35,6 +35,24 @@ std::string recv_string (udp::socket &socket, boost::array<char, 128> &buff,udp:
     return recv_mess;
 }
 
+std::string recv_with_TO (udp::socket &socket, boost::array<char, 128> &buff,udp::endpoint &sender) {
+    std::string recv_mess;
+    buff.assign(0);
+    socket.non_blocking(true);
+    try
+    {
+        socket.receive_from(buffer(buff), sender);
+    }
+    catch(...)
+    {
+        socket.non_blocking(false);
+        return "NONE";
+    }
+    recv_mess = buff.data();
+    socket.non_blocking(false);
+    return recv_mess;
+}
+
 TwoPlayerMap::TwoPlayerMap (char** lvl) 
 {
     std::random_device dev;
@@ -52,10 +70,9 @@ TwoPlayerMap::TwoPlayerMap (char** lvl)
     //connection
     socket.open(udp::v4());
     udp::endpoint endpoint_ = udp::endpoint{ip::address::from_string("127.0.0.1"), my_port};
-    my_endpoint = &endpoint_;
-    socket.bind(*my_endpoint);
-
-    const int timeout = 200;
+    my_endpoint = endpoint_;
+    socket.bind(my_endpoint);
+    // socket.set_option(boost::asio::detail::socket_option::integer<SOL_SOCKET, SO_RCVTIMEO>{ 200 });
     // ::setsockopt(socket.native_handle(), SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof timeout);//SO_SNDTIMEO for send ops
     
     // request/message from client
@@ -81,7 +98,7 @@ TwoPlayerMap::TwoPlayerMap (char** lvl)
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     my_socket = &socket;
-    opponent_endpoint = &peer;
+    opponent_endpoint = peer;
     opponent_lives_left = MAX_LIVES;
     opponent_last_frame = -1;
     opponent_cur_frame = -1;
@@ -91,16 +108,16 @@ TwoPlayerMap::TwoPlayerMap (char** lvl)
     int my_value = dist7(rng), opponent_value;
     std::string opp_mess;
 
-    assert(peer == *opponent_endpoint);
+    assert(peer == opponent_endpoint);
 
-    my_socket->send_to(buffer(std::to_string(my_value)), *opponent_endpoint);
-    opp_mess = recv_string(*my_socket, recv_buf, *opponent_endpoint);
+    my_socket->send_to(buffer(std::to_string(my_value)), opponent_endpoint);
+    opp_mess = recv_string(*my_socket, recv_buf, opponent_endpoint);
     opponent_value = std::stoi(opp_mess);
     std::cout << my_value << " " << opponent_value << "\n";
     while (my_value == opponent_value) {
         my_value = dist7(rng);
-        my_socket->send_to(buffer(std::to_string(my_value)), *opponent_endpoint);
-        opp_mess = recv_string(*my_socket, recv_buf, *opponent_endpoint);
+        my_socket->send_to(buffer(std::to_string(my_value)), opponent_endpoint);
+        opp_mess = recv_string(*my_socket, recv_buf, opponent_endpoint);
         opponent_value = std::stoi(opp_mess);
     }
 
@@ -109,9 +126,9 @@ TwoPlayerMap::TwoPlayerMap (char** lvl)
     std::vector <int> posi;
     if (isHost) {
         map_chosen = dist7(rng);
-        my_socket->send_to(buffer(std::to_string(map_chosen)), *opponent_endpoint);
+        my_socket->send_to(buffer(std::to_string(map_chosen)), opponent_endpoint);
     } else {
-        opp_mess = recv_string(*my_socket, recv_buf, *opponent_endpoint);
+        opp_mess = recv_string(*my_socket, recv_buf, opponent_endpoint);
         map_chosen = std::stoi(opp_mess);
     }
 
@@ -148,86 +165,169 @@ void TwoPlayerMap::UpdateMap (SDL_Event &e)
     Pacman->Update ();
 }
 
-void TwoPlayerMap::MoveMonsters ()
+void TwoPlayerMap::MoveMonsters (SDL_Event& e)
 {
-    int xmap_new, ymap_new;
-    std::pair <int, std::string> res;
-    std::string action;
+    io_service io_service;
+    udp::socket socket(io_service);
+    socket.open(udp::v4());
 
-    // Move Monster1
-    // std::cout << Monster1->xpos << "\n";
-    if (tmp1 == 0) {
-        res = ChooseGreedyActionMD(Monster1, Monster2, Pacman, DIFFICULTY, FRAME_JUMP, tmp1, lma1);
-        tmp1 = res.first;
-        lma1 = res.second;
-    } 
+    std::cout << my_endpoint.address().to_string() << " " << my_endpoint.port() << "\n";
+
+    socket.bind(my_endpoint);
+    // ::setsockopt(socket.native_handle(), SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof timeout);//SO_SNDTIMEO for send ops
+    boost::array<char, 128> recv_buf;
+
+    if (isHost) {
+        std::cout << "I am host\n";
+        int xmap_new, ymap_new;
+        std::pair <int, std::string> res;
+        std::string action;
+
+        // Move Monster1
+        if (tmp1 == 0) {
+            res = ChooseGreedyActionMD(Monster1, Monster2, Pacman, DIFFICULTY, FRAME_JUMP, tmp1, lma1);
+            tmp1 = res.first;
+            lma1 = res.second;
+        } 
+        else {
+            tmp1--;
+        }
+        action = lma1;
+
+        if (action == "UP") {
+            Monster1->ypos = Monster1->ypos - FRAME_JUMP * MOVE_VEL_Y;
+        }
+        else if (action == "DOWN") {
+            Monster1->ypos = Monster1->ypos + FRAME_JUMP * MOVE_VEL_Y;
+        }
+        else if (action == "RIGHT") {
+            Monster1->xpos = Monster1->xpos + FRAME_JUMP * MOVE_VEL_X;
+        }
+        else if (action == "LEFT") {
+            Monster1->xpos = Monster1->xpos - FRAME_JUMP * MOVE_VEL_X;
+        }
+
+        xmap_new = (Monster1->xpos + TILE_WIDTH / 2) / TILE_WIDTH;
+        ymap_new = (Monster1->ypos + TILE_HEIGHT / 2) / TILE_HEIGHT;
+
+        if (xmap_new != Monster1->xmap || ymap_new != Monster1->ymap) {
+            if (map[Monster1->ymap][Monster1->xmap] == MONSTER1_ON_EMPTY) map[Monster1->ymap][Monster1->xmap] = EMPTY;
+            else map[Monster1->ymap][Monster1->xmap] = FOOD;
+            if (map[ymap_new][xmap_new] == FOOD) map[ymap_new][xmap_new] = MONSTER1_ON_FOOD;
+            else map[ymap_new][xmap_new] = MONSTER1_ON_EMPTY;
+        }
+
+        Monster1->xmap = xmap_new;
+        Monster1->ymap = ymap_new;
+
+        //Move Monster2 based on the other player events
+        action = lma2;
+
+        action = recv_with_TO(socket, recv_buf, opponent_endpoint);
+        lma2 = action;
+
+        if (action == "UP") {
+            Monster2->ypos = Monster2->ypos - FRAME_JUMP * MOVE_VEL_Y;
+        }
+        else if (action == "DOWN") {
+            Monster2->ypos = Monster2->ypos + FRAME_JUMP * MOVE_VEL_Y;
+        }
+        else if (action == "RIGHT") {
+            Monster2->xpos = Monster2->xpos + FRAME_JUMP * MOVE_VEL_X;
+        }
+        else if (action == "LEFT") {
+            Monster2->xpos = Monster2->xpos - FRAME_JUMP * MOVE_VEL_X;
+        }
+
+        xmap_new = (Monster2->xpos + TILE_WIDTH / 2) / TILE_WIDTH;
+        ymap_new = (Monster2->ypos + TILE_HEIGHT / 2) / TILE_HEIGHT;
+
+        if (xmap_new != Monster2->xmap || ymap_new != Monster2->ymap) {
+            if (map[Monster2->ymap][Monster2->xmap] == MONSTER2_ON_EMPTY) map[Monster2->ymap][Monster2->xmap] = EMPTY;
+            else map[Monster2->ymap][Monster2->xmap] = FOOD;
+            if (map[ymap_new][xmap_new] == FOOD) map[ymap_new][xmap_new] = MONSTER2_ON_FOOD;
+            else map[ymap_new][xmap_new] = MONSTER2_ON_EMPTY;
+        }
+
+        Monster2->xmap = xmap_new;
+        Monster2->ymap = ymap_new;
+        socket.send_to(buffer(std::to_string(Pacman->xpos) + " " + std::to_string(Pacman->ypos) + " " + std::to_string(Monster1->xpos) + " " + std::to_string(Monster1->ypos) + " " + std::to_string(Monster2->xpos) + " " + std::to_string(Monster2->ypos)), opponent_endpoint);
+    }
     else {
-        tmp1--;
-    }
-    action = lma1;
+        std::cout << "I am not host\n";
+        std::string move = HandleOpponentEvent(e);
+        std::cout << move << "\n";
+        if (move != "NONE")
+            socket.send_to(buffer(move), opponent_endpoint);
+        
+        // std::string GO_pos = recv_with_TO(socket, recv_buf, opponent_endpoint);
+        // std::cout << GO_pos << "\n";
+        // if (GO_pos != "NONE") {
+        //     int xmap_new, ymap_new;
+        //     std::vector <std::string> GO_posi = split(GO_pos);
+        //     assert(GO_posi.size() == 6);
+            // Pacman->xpos = std::stoi(GO_posi[0]);
+            // Pacman->ypos = std::stoi(GO_posi[1]);
+            // Monster1->xpos = std::stoi(GO_posi[2]);
+            // Monster1->ypos = std::stoi(GO_posi[3]);
+            // Monster2->xpos = std::stoi(GO_posi[4]);
+            // Monster2->ypos = std::stoi(GO_posi[5]);
 
-    if (action == "UP") {
-        Monster1->ypos = Monster1->ypos - FRAME_JUMP * MOVE_VEL_Y;
-    }
-    else if (action == "DOWN") {
-        Monster1->ypos = Monster1->ypos + FRAME_JUMP * MOVE_VEL_Y;
-    }
-    else if (action == "RIGHT") {
-        Monster1->xpos = Monster1->xpos + FRAME_JUMP * MOVE_VEL_X;
-    }
-    else if (action == "LEFT") {
-        Monster1->xpos = Monster1->xpos - FRAME_JUMP * MOVE_VEL_X;
-    }
+            // xmap_new = (Monster1->xpos + TILE_WIDTH / 2) / TILE_WIDTH;
+            // ymap_new = (Monster1->ypos + TILE_HEIGHT / 2) / TILE_HEIGHT;
 
-    xmap_new = (Monster1->xpos + TILE_WIDTH / 2) / TILE_WIDTH;
-    ymap_new = (Monster1->ypos + TILE_HEIGHT / 2) / TILE_HEIGHT;
+            // if (xmap_new != Monster1->xmap || ymap_new != Monster1->ymap) {
+            //     if (map[Monster1->ymap][Monster1->xmap] == MONSTER1_ON_EMPTY) map[Monster1->ymap][Monster1->xmap] = EMPTY;
+            //     else map[Monster1->ymap][Monster1->xmap] = FOOD;
+            //     if (map[ymap_new][xmap_new] == FOOD) map[ymap_new][xmap_new] = MONSTER1_ON_FOOD;
+            //     else map[ymap_new][xmap_new] = MONSTER1_ON_EMPTY;
+            // }
 
-    if (xmap_new != Monster1->xmap || ymap_new != Monster1->ymap) {
-        if (map[Monster1->ymap][Monster1->xmap] == MONSTER1_ON_EMPTY) map[Monster1->ymap][Monster1->xmap] = EMPTY;
-        else map[Monster1->ymap][Monster1->xmap] = FOOD;
-        if (map[ymap_new][xmap_new] == FOOD) map[ymap_new][xmap_new] = MONSTER1_ON_FOOD;
-        else map[ymap_new][xmap_new] = MONSTER1_ON_EMPTY;
-    }
+            // Monster1->xmap = xmap_new;
+            // Monster1->ymap = ymap_new;
 
-    Monster1->xmap = xmap_new;
-    Monster1->ymap = ymap_new;
+            // xmap_new = (Monster2->xpos + TILE_WIDTH / 2) / TILE_WIDTH;
+            // ymap_new = (Monster2->ypos + TILE_HEIGHT / 2) / TILE_HEIGHT;
 
-    // Move Monster2
-    if (tmp2 == 0) {
-        res = ChooseGreedyActionMD(Monster2, Monster1, Pacman, DIFFICULTY, FRAME_JUMP, tmp2, lma2);
-        tmp2 = res.first;
-        lma2 = res.second;
-    } 
-    else {
-        tmp2--;
-    }
-    action = lma2;
+            // if (xmap_new != Monster2->xmap || ymap_new != Monster2->ymap) {
+            //     if (map[Monster2->ymap][Monster2->xmap] == MONSTER2_ON_EMPTY) map[Monster2->ymap][Monster2->xmap] = EMPTY;
+            //     else map[Monster2->ymap][Monster2->xmap] = FOOD;
+            //     if (map[ymap_new][xmap_new] == FOOD) map[ymap_new][xmap_new] = MONSTER2_ON_FOOD;
+            //     else map[ymap_new][xmap_new] = MONSTER2_ON_EMPTY;
+            // }
 
-    if (action == "UP") {
-        Monster2->ypos = Monster2->ypos - FRAME_JUMP * MOVE_VEL_Y;
+            // Monster2->xmap = xmap_new;
+            // Monster2->ymap = ymap_new;
+        // }
     }
-    else if (action == "DOWN") {
-        Monster2->ypos = Monster2->ypos + FRAME_JUMP * MOVE_VEL_Y;
-    }
-    else if (action == "RIGHT") {
-        Monster2->xpos = Monster2->xpos + FRAME_JUMP * MOVE_VEL_X;
-    }
-    else if (action == "LEFT") {
-        Monster2->xpos = Monster2->xpos - FRAME_JUMP * MOVE_VEL_X;
-    }
+}
 
-    xmap_new = (Monster2->xpos + TILE_WIDTH / 2) / TILE_WIDTH;
-    ymap_new = (Monster2->ypos + TILE_HEIGHT / 2) / TILE_HEIGHT;
+std::string TwoPlayerMap::HandleOpponentEvent (SDL_Event &e)
+{
+    if (e.type == SDL_KEYDOWN && e.key.repeat == 0) {
+        switch (e.key.keysym.sym)
+        {
+            case SDLK_RIGHT:
+                return "RIGHT";
+                break;
+            
+            case SDLK_LEFT:
+                return "LEFT";
+                break;
 
-    if (xmap_new != Monster2->xmap || ymap_new != Monster2->ymap) {
-        if (map[Monster2->ymap][Monster2->xmap] == MONSTER2_ON_EMPTY) map[Monster2->ymap][Monster2->xmap] = EMPTY;
-        else map[Monster2->ymap][Monster2->xmap] = FOOD;
-        if (map[ymap_new][xmap_new] == FOOD) map[ymap_new][xmap_new] = MONSTER2_ON_FOOD;
-        else map[ymap_new][xmap_new] = MONSTER2_ON_EMPTY;
-    }
-
-    Monster2->xmap = xmap_new;
-    Monster2->ymap = ymap_new;
+            case SDLK_UP:
+                return "UP";
+                break;
+            
+            case SDLK_DOWN:
+                return "DOWN";
+                break;
+            
+            default:
+                return "NONE"; 
+                break;
+        }
+    }   
 }
 
 void TwoPlayerMap::DrawMap () 
@@ -358,17 +458,20 @@ void TwoPlayerMap::ExchangeMapInfo ()
     io_service io_service;
     udp::socket socket(io_service);
     socket.open(udp::v4());
-    socket.bind(*my_endpoint);
+    socket.bind(my_endpoint);
     boost::array<char, 128> recv_buf;
 
     if (isHost) {
-        socket.send_to(buffer(std::to_string(FrameCnt) + " " + std::to_string(score) + " " + std::to_string(lives_left)), *opponent_endpoint);
+        socket.send_to(buffer(std::to_string(FrameCnt) + " " + std::to_string(score) + " " + std::to_string(lives_left)), opponent_endpoint);
     } else {
-        std::string opp_info = recv_string(socket, recv_buf, *opponent_endpoint);
+        std::cout << "Reached\n";
+        std::string opp_info = recv_string(socket, recv_buf, opponent_endpoint);
         std::vector <std::string> all_info = split(opp_info);
         opponent_last_frame = opponent_cur_frame;
         opponent_cur_frame = std::stoi(all_info[0]);
         opponent_score = std::stoi(all_info[1]);
         opponent_lives_left = std::stoi(all_info[2]);
     }
+
+    socket.close();
 }

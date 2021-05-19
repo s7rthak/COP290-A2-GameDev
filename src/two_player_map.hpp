@@ -13,7 +13,8 @@ class TwoPlayerMap {
         ~TwoPlayerMap ();
 
         void UpdateMap (SDL_Event &e);
-        void MoveMonsters ();
+        void MoveMonsters (SDL_Event &e);
+        std::string HandleOpponentEvent (SDL_Event &e);
         void DrawMap ();
         void RenderMap ();
         void ExchangeMapInfo ();
@@ -35,9 +36,9 @@ class TwoPlayerMap {
         bool gameWon = false;
 
         udp::socket* my_socket;
-        udp::endpoint* my_endpoint;
+        udp::endpoint my_endpoint;
         // Other player info
-        udp::endpoint* opponent_endpoint;
+        udp::endpoint opponent_endpoint;
         int opponent_score;
         int opponent_lives_left;
         int opponent_last_frame;

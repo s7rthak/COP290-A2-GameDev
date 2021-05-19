@@ -8,6 +8,7 @@
 #include "screen.hpp"
 #include "two_player_map.hpp"
 #include "constants.hpp"
+#include "sound.hpp"
 #include <SDL2/SDL_ttf.h>
 
 
@@ -26,6 +27,7 @@ TwoPlayerMap* two_player;
 Screen* firstScreen;
 Screen* goodEnd;
 Screen* badEnd; 
+Sound* all_Sounds;
 
 Uint32 frameStart;
 int frameTime;
@@ -46,23 +48,23 @@ void Game::init (const char* title, int xpos, int ypos, int width, int height, b
     }
 
     if (SDL_Init(SDL_INIT_EVERYTHING) == 0) {
-        std::cout << "Subsystem Initialised!...\n";
+        // std::cout << "Subsystem Initialised!...\n";
 
         window = SDL_CreateWindow(title, xpos, ypos, width, height, flags);
-        if (window) {
-            std::cout << "Window created!\n";
-        }
+        // if (window) {
+        //     std::cout << "Window created!\n";
+        // }
 
         renderer = SDL_CreateRenderer(window, -1, 0);
-        if (renderer) {
-            // SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-            std::cout << "Renderer created!\n";
-        }
+        // if (renderer) {
+        //     std::cout << "Renderer created!\n";
+        // }
 
         isRunning = true;
     } else {
         isRunning = false;
     }
+    all_Sounds = new Sound ();
 }
 
 void Game::LoadGameStates () 
@@ -74,6 +76,7 @@ void Game::LoadGameStates ()
     while (gameState != -1) {
 
         if (gameState == START_MENU) {
+            all_Sounds->playStarter ();
             firstScreen = new Screen();
 
             d.y = 50;
@@ -120,6 +123,7 @@ void Game::LoadGameStates ()
         }
 
         else if (gameState == SINGLE_PLAYER) {
+            all_Sounds->playBack();
             std::system("./maze_gen");
 
             // dynamically create array of pointers of size num_rows
@@ -174,8 +178,8 @@ void Game::LoadGameStates ()
                 lvl[i] = (char*)malloc(32 * sizeof(char));
 
             two_player = new TwoPlayerMap(lvl);
-            SDL_Delay(3000);
             two_player->RenderMap();
+            SDL_Delay(3000);
 
             while (gameState == TWO_PLAYER) {
                 frameStart = SDL_GetTicks();
@@ -190,6 +194,7 @@ void Game::LoadGameStates ()
 
                 default:
                     two_player->RenderMap ();
+                    two_player->MoveMonsters(event);
                     two_player->ExchangeMapInfo ();
                     break;
                 }
@@ -202,6 +207,7 @@ void Game::LoadGameStates ()
         }
 
         else if (gameState == GOOD_END_SP) {
+            all_Sounds->playGood();
             goodEnd = new Screen();
             SDL_Texture* youWin = TextureManager::LoadTexture("../assets/win.png");
 
@@ -254,6 +260,7 @@ void Game::LoadGameStates ()
         }
 
         else if (gameState == BAD_END_SP) {
+            all_Sounds->playBad();
             badEnd = new Screen();
             SDL_Texture* youLose = TextureManager::LoadTexture("../assets/lose.png");
 
